@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous Drone Emergency Brain | Tactical Command Center</title>
+    <meta name="description" content="Explainable autonomous emergency decision and recovery system for virtual drone operations.">
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="command-center-body">
+    <!-- TOP COMMAND HEADER -->
+    <header class="cc-header">
+        <div class="cc-brand">
+            <div class="brain-icon-glow">🧠</div>
+            <div class="cc-title-block">
+                <h1>AUTONOMOUS DRONE EMERGENCY BRAIN</h1>
+                <p class="cc-subtitle">The drone encounters the failure. Our Emergency Brain decides how to respond.</p>
+            </div>
+        </div>
+
+        <div class="cc-status-cluster">
+            <div class="system-monitor-badge" id="monitor-badge">
+                <span class="blinking-dot"></span>
+                <span id="monitor-text">MONITORING ACTIVE</span>
+            </div>
+            <div class="meta-tag">
+                <span class="meta-label">MISSION:</span>
+                <span class="meta-val" id="meta-mission-id">MISSION-001</span>
+            </div>
+            <div class="meta-tag">
+                <span class="meta-label">STATE:</span>
+                <span class="meta-val badge-state" id="meta-state">READY</span>
+            </div>
+            <div class="meta-tag">
+                <span class="meta-label">SIM TIME:</span>
+                <span class="meta-val font-mono" id="meta-time">0.0s</span>
+            </div>
+        </div>
+
+        <!-- SIMULATION CONTROLS -->
+        <div class="cc-controls">
+            <div class="speed-toggle-group">
+                <button class="btn-speed active" id="btn-speed-1" onclick="setSpeed(1)">1×</button>
+                <button class="btn-speed" id="btn-speed-2" onclick="setSpeed(2)">2×</button>
+                <button class="btn-speed" id="btn-speed-4" onclick="setSpeed(4)">4×</button>
+            </div>
+            <button class="btn btn-primary" id="btn-start" onclick="startMission()">▶ START</button>
+            <button class="btn btn-warning" id="btn-pause" onclick="pauseMission()">⏸ PAUSE</button>
+            <button class="btn btn-danger" id="btn-reset" onclick="resetMission()">↺ RESET</button>
+        </div>
+    </header>
+
+    <!-- MAIN DASHBOARD THREE-COLUMN WORKSPACE -->
+    <main class="cc-workspace">
+        
+        <!-- LEFT COLUMN: TACTICAL MAP & INJECTION CONTROLS -->
+        <section class="cc-col cc-col-map">
+            <!-- MAP CARD -->
+            <div class="glass-card map-card">
+                <div class="card-header">
+                    <h2>TACTICAL AIRSPACE GEOFENCE MAP (100 × 100)</h2>
+                    <div class="map-coordinates-readout font-mono">
+                        POS: <span id="map-drone-pos">[10.0, 80.0]</span> | LAST GPS: <span id="map-last-gps">[10.0, 80.0]</span>
+                    </div>
+                </div>
+
+                <div class="map-viewport">
+                    <svg id="airspace-map" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet">
+                        <!-- Background Grid -->
+                        <defs>
+                            <pattern id="grid-pattern" width="10" height="10" patternUnits="userSpaceOnUse">
+                                <path d="M 10 0 L 0 0 0 10" fill="none" stroke="rgba(56, 189, 248, 0.08)" stroke-width="0.3"/>
+                            </pattern>
+                            <radialGradient id="restricted-glow" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stop-color="rgba(244, 63, 94, 0.35)"/>
+                                <stop offset="100%" stop-color="rgba(244, 63, 94, 0.1)"/>
+                            </radialGradient>
+                            <radialGradient id="private-glow" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stop-color="rgba(245, 158, 11, 0.3)"/>
+                                <stop offset="100%" stop-color="rgba(245, 158, 11, 0.08)"/>
+                            </radialGradient>
+                            <radialGradient id="hover-zone-glow" cx="50%" cy="50%" r="50%">
+                                <stop offset="0%" stop-color="rgba(16, 185, 129, 0.35)"/>
+                                <stop offset="100%" stop-color="rgba(16, 185, 129, 0.05)"/>
+                            </radialGradient>
+                        </defs>
+
+                        <rect width="100" height="100" fill="url(#grid-pattern)" />
+
+                        <!-- Restricted Airspace: x=42-62, y=40-60 -->
+                        <rect id="zone-restricted" x="42" y="40" width="20" height="20" class="airspace-restricted" />
+                        <text x="52" y="50" class="map-label label-restricted" text-anchor="middle">RESTRICTED AIRSPACE</text>
+                        <text x="52" y="53" class="map-label-sub" text-anchor="middle">(NO-FLY ZONE [50,50])</text>
+
+                        <!-- Private Property: x=68-82, y=30-45 -->
+                        <rect id="zone-private" x="68" y="30" width="14" height="15" class="airspace-private" />
+                        <text x="75" y="38" class="map-label label-private" text-anchor="middle">PRIVATE PROPERTY</text>
+
+                        <!-- Legal Hover Zones (HZ1 - HZ4) -->
+                        <g id="hover-zones-group">
+                            <!-- HZ1: 36, 66 (Primary South-West) -->
+                            <circle id="map-hz1" cx="36" cy="66" r="5" class="airspace-hover-zone hz-primary" />
+                            <text x="36" y="66.5" class="map-hz-label" text-anchor="middle">HZ1</text>
+                            
+                            <!-- HZ2: 30, 45 -->
+                            <circle id="map-hz2" cx="30" cy="45" r="5" class="airspace-hover-zone" />
+                            <text x="30" y="45.5" class="map-hz-label" text-anchor="middle">HZ2</text>
+                            
+                            <!-- HZ3: 72, 60 -->
+                            <circle id="map-hz3" cx="72" cy="60" r="5" class="airspace-hover-zone" />
+                            <text x="72" y="60.5" class="map-hz-label" text-anchor="middle">HZ3</text>
+                            
+                            <!-- HZ4: 85, 12 -->
+                            <circle id="map-hz4" cx="85" cy="12" r="5" class="airspace-hover-zone" />
+                            <text x="85" y="12.5" class="map-hz-label" text-anchor="middle">HZ4</text>
+                        </g>
+
+                        <!-- Planned Primary Flight Corridor (10,80 -> 90,20) -->
+                        <line x1="10" y1="80" x2="90" y2="20" class="flight-path-planned" />
+
+                        <!-- Actual Traversed Path Trail -->
+                        <polyline id="drone-path-trail" points="10,80" class="flight-path-actual" />
+
+                        <!-- Dynamic Recovery / Alternate Route Lines -->
+                        <line id="route-recovery-line" x1="0" y1="0" x2="0" y2="0" class="flight-path-recovery" display="none" />
+                        <polyline id="route-alternate-polyline" points="" class="flight-path-alternate" display="none" />
+
+                        <!-- Obstacle Marker -->
+                        <g id="map-obstacle-marker" display="none">
+                            <circle id="obstacle-dot" cx="40" cy="50" r="2.2" class="obstacle-pulse" />
+                            <text id="obstacle-text" x="40" y="47" class="obstacle-label" text-anchor="middle">⚠️ OBSTACLE</text>
+                        </g>
+
+                        <!-- Waypoints: HOME & DESTINATION -->
+                        <g id="waypoint-home" transform="translate(10, 80)">
+                            <circle r="2.5" class="wp-home-glow" />
+                            <circle r="1.2" class="wp-home-dot" />
+                            <text x="0" y="5.5" class="wp-label" text-anchor="middle">HOME [10,80]</text>
+                        </g>
+                        <g id="waypoint-dest" transform="translate(90, 20)">
+                            <circle r="2.5" class="wp-dest-glow" />
+                            <circle r="1.2" class="wp-dest-dot" />
+                            <text x="0" y="-3.5" class="wp-label" text-anchor="middle">DESTINATION [90,20]</text>
+                        </g>
+
+                        <!-- Current Recovery Target Crosshair -->
+                        <g id="map-target-crosshair" display="none">
+                            <circle cx="0" cy="0" r="4" class="target-crosshair-ring" />
+                            <line x1="-5" y1="0" x2="5" y2="0" stroke="#38bdf8" stroke-width="0.5" />
+                            <line x1="0" y1="-5" x2="0" y2="5" stroke="#38bdf8" stroke-width="0.5" />
+                            <text id="target-crosshair-text" x="0" y="-5.5" class="target-label" text-anchor="middle">TARGET</text>
+                        </g>
+
+                        <!-- Drone Vehicle Marker -->
+                        <g id="drone-vehicle" transform="translate(10, 80)">
+                            <circle r="3.2" class="drone-sensor-field" />
+                            <circle r="1.6" class="drone-core" />
+                            <!-- Quadcopter Rotor arms -->
+                            <line x1="-2" y1="-2" x2="2" y2="2" stroke="#38bdf8" stroke-width="0.4" />
+                            <line x1="-2" y1="2" x2="2" y2="-2" stroke="#38bdf8" stroke-width="0.4" />
+                            <circle cx="-2" cy="-2" r="0.6" fill="#10b981" />
+                            <circle cx="2" cy="-2" r="0.6" fill="#10b981" />
+                            <circle cx="-2" cy="2" r="0.6" fill="#38bdf8" />
+                            <circle cx="2" cy="2" r="0.6" fill="#38bdf8" />
+                        </g>
+                    </svg>
+                </div>
+
+                <!-- MAP LEGEND -->
+                <div class="map-legend">
+                    <span class="legend-item"><span class="legend-box planned-line"></span> Planned Path</span>
+                    <span class="legend-item"><span class="legend-box trail-line"></span> Traversed Trail</span>
+                    <span class="legend-item"><span class="legend-box restricted-box"></span> Restricted Airspace</span>
+                    <span class="legend-item"><span class="legend-box private-box"></span> Private Property</span>
+                    <span class="legend-item"><span class="legend-box hz-box"></span> Legal Hover Zones (HZ1-4)</span>
+                </div>
+            </div>
+
+            <!-- FAULT INJECTION CONTROLS CARD -->
+            <div class="glass-card injection-card">
+                <div class="card-header">
+                    <h2>SIMULATOR FAULT INJECTION MATRIX</h2>
+                    <span class="tag-subtle">Decoupled Telemetry-Only Injections</span>
+                </div>
+                <div class="button-grid">
+                    <button class="btn btn-fault" id="btn-gps-loss" onclick="injectFault('gps-loss')">📡 GPS LOSS</button>
+                    <button class="btn btn-action" id="btn-gps-restore" onclick="injectFault('gps-restore')">✅ RESTORE GPS</button>
+                    <button class="btn btn-fault" id="btn-gps-degrade" onclick="injectFault('gps-degrade')">📶 DEGRADE GPS</button>
+
+                    <button class="btn btn-fault" id="btn-low-battery" onclick="injectFault('low-battery')">🪫 LOW BATTERY (28%)</button>
+                    <button class="btn btn-fault-crit" id="btn-crit-battery" onclick="injectFault('critical-battery')">⚡ CRITICAL BATT (18%)</button>
+
+                    <button class="btn btn-fault" id="btn-comm-loss" onclick="injectFault('communication-loss')">📻 COMM FAILURE</button>
+                    <button class="btn btn-action" id="btn-comm-restore" onclick="injectFault('communication-restore')">📶 RESTORE COMM</button>
+
+                    <button class="btn btn-fault" id="btn-obstacle" onclick="injectFault('obstacle')">🚧 INJECT OBSTACLE</button>
+                    <button class="btn btn-action" id="btn-obstacle-clear" onclick="injectFault('obstacle-clear')">✨ CLEAR OBSTACLE</button>
+
+                    <button class="btn btn-fault-crit" id="btn-unauthorized" onclick="injectFault('unauthorized-movement')">🚨 UNAUTH MOVEMENT</button>
+                    <button class="btn btn-fault-crit" id="btn-multi-failure" onclick="injectFault('multi-failure')">🔥 MULTI-FAILURE</button>
+                    <button class="btn btn-action" id="btn-scenario-reset" onclick="injectFault('reset')">🔄 CLEAR ALL FAULTS</button>
+                </div>
+            </div>
+
+            <!-- AUTOMATED DEMO RUNNERS -->
+            <div class="glass-card demo-card">
+                <div class="card-header">
+                    <h2>🎬 AUTOMATED DEMO SCENARIO MODES</h2>
+                    <span class="tag-subtle">Deterministic Closed-Loop Execution</span>
+                </div>
+                <div class="demo-button-grid">
+                    <button class="btn btn-demo highlight-flagship" onclick="runDemo('flagship')">
+                        ⭐ 1. FLAGSHIP: GPS LOSS OVER RESTRICTED ZONE
+                    </button>
+                    <button class="btn btn-demo" onclick="runDemo('critical-battery')">
+                        2. CRITICAL LOW BATTERY (RTH)
+                    </button>
+                    <button class="btn btn-demo" onclick="runDemo('obstacle')">
+                        3. OBSTACLE BLOCKED CORRIDOR
+                    </button>
+                    <button class="btn btn-demo" onclick="runDemo('multi-failure')">
+                        4. MULTI-FAILURE EMERGENCY
+                    </button>
+                    <button class="btn btn-demo" onclick="runDemo('unauthorized-movement')">
+                        5. UNAUTHORIZED MOVEMENT LOCK
+                    </button>
+                    <button class="btn btn-demo btn-demo-failing" onclick="runDemo('failing-verification')">
+                        6. INTENTIONALLY FAILING VERIFICATION
+                    </button>
+                </div>
+            </div>
+        </section>
+
+        <!-- CENTER COLUMN: EMERGENCY BRAIN & VERIFICATION -->
+        <section class="cc-col cc-col-brain">
+            
+            <!-- EMERGENCY BRAIN PROMINENT PANEL -->
+            <div class="glass-card brain-panel">
+                <div class="brain-card-glow"></div>
+                <div class="card-header brain-header">
+                    <div class="title-with-pulse">
+                        <span class="brain-badge">🧠 EMERGENCY BRAIN</span>
+                        <h2>EXPLAINABLE SITUATIONAL DECISION</h2>
+                    </div>
+                    <span class="badge-decision" id="brain-decision-badge">CONTINUE_MISSION</span>
+                </div>
+
+                <!-- Decision Core Summary -->
+                <div class="brain-core-box">
+                    <div class="core-field">
+                        <span class="field-label">WHY THIS ACTION:</span>
+                        <p class="decision-reason-text" id="brain-reason">
+                            All simulated telemetry streams, sensor locks, energy reserves, and airspace checks are nominal.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Telemetry Evaluation Evidence -->
+                <div class="evidence-box">
+                    <span class="field-label">OBSERVED EVIDENCE & SIGNALS:</span>
+                    <ul class="evidence-list" id="brain-evidence-list">
+                        <li>No failures detected</li>
+                        <li>Battery above threshold</li>
+                        <li>GPS lock healthy</li>
+                    </ul>
+                </div>
+
+                <!-- Rules Fired & Active Priority -->
+                <div class="rules-fired-row">
+                    <div class="rule-box">
+                        <span class="rule-label">RULE FIRED:</span>
+                        <span class="rule-tag" id="brain-rule-id">R14_NOMINAL</span>
+                    </div>
+                    <div class="rule-box">
+                        <span class="rule-label">TARGET STATION:</span>
+                        <span class="rule-val font-mono" id="brain-target-pos">[90.0, 20.0]</span>
+                    </div>
+                </div>
+
+                <!-- Rejected Alternatives & Rationale (Part P Explanations) -->
+                <div class="rejected-options-container">
+                    <span class="field-label">REJECTED OPTIONS & RATIONALE:</span>
+                    <div class="rejected-scroll-list" id="brain-rejected-list">
+                        <div class="rejected-item">
+                            <span class="rejected-name">Nominal Transit</span>
+                            <span class="rejected-reason">No emergency alternative required under clear conditions.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLOSED-LOOP PIPELINE PROGRESS -->
+            <div class="glass-card pipeline-card">
+                <div class="card-header">
+                    <h2>CLOSED-LOOP RESPONSE PIPELINE</h2>
+                </div>
+                <div class="pipeline-track">
+                    <div class="pipeline-step active" id="pipe-monitor">
+                        <span class="step-num">1</span>
+                        <span class="step-name">MONITOR</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-step" id="pipe-detect">
+                        <span class="step-num">2</span>
+                        <span class="step-name">DETECT</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-step" id="pipe-classify">
+                        <span class="step-num">3</span>
+                        <span class="step-name">CLASSIFY</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-step" id="pipe-decide">
+                        <span class="step-num">4</span>
+                        <span class="step-name">DECIDE</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-step" id="pipe-recover">
+                        <span class="step-num">5</span>
+                        <span class="step-name">RECOVER</span>
+                    </div>
+                    <div class="pipeline-connector"></div>
+                    <div class="pipeline-step" id="pipe-verify">
+                        <span class="step-num">6</span>
+                        <span class="step-name">VERIFY</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RECOVERY EXECUTION PANEL -->
+            <div class="glass-card recovery-card">
+                <div class="card-header">
+                    <h2>RECOVERY EXECUTOR DISPATCH</h2>
+                    <span class="badge-recovery-state" id="recovery-state-badge">STANDBY</span>
+                </div>
+                <div class="recovery-detail-grid">
+                    <div class="rec-item">
+                        <span class="rec-label">COMMAND ID:</span>
+                        <span class="rec-val font-mono" id="rec-cmd-id">NONE</span>
+                    </div>
+                    <div class="rec-item">
+                        <span class="rec-label">ACTION:</span>
+                        <span class="rec-val" id="rec-action-type">CONTINUE_MISSION</span>
+                    </div>
+                    <div class="rec-item">
+                        <span class="rec-label">TARGET COORD:</span>
+                        <span class="rec-val font-mono" id="rec-target-pos">[90.0, 20.0]</span>
+                    </div>
+                    <div class="rec-item">
+                        <span class="rec-label">FLIGHT MODE:</span>
+                        <span class="rec-val" id="rec-flight-mode">MISSION</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- INDEPENDENT RECOVERY VERIFICATION PANEL (Part R) -->
+            <div class="glass-card verification-card">
+                <div class="card-header">
+                    <h2>INDEPENDENT RECOVERY VERIFICATION</h2>
+                    <span class="badge-verif" id="verif-overall-status">STANDBY</span>
+                </div>
+                <div class="verif-checks-grid" id="verif-checks-container">
+                    <div class="verif-check-row">
+                        <span class="check-title">Target Reached</span>
+                        <span class="check-result pass" id="chk-target">✓ PASS</span>
+                    </div>
+                    <div class="verif-check-row">
+                        <span class="check-title">Speed Near Zero (&lt;0.2)</span>
+                        <span class="check-result pass" id="chk-speed">✓ PASS</span>
+                    </div>
+                    <div class="verif-check-row">
+                        <span class="check-title">Legal Airspace / Zone</span>
+                        <span class="check-result pass" id="chk-legal">✓ PASS</span>
+                    </div>
+                    <div class="verif-check-row">
+                        <span class="check-title">Battery Reserve (&gt;10%)</span>
+                        <span class="check-result pass" id="chk-battery">✓ PASS</span>
+                    </div>
+                    <div class="verif-check-row">
+                        <span class="check-title">Station Holding Secure</span>
+                        <span class="check-result pass" id="chk-security">✓ PASS</span>
+                    </div>
+                </div>
+                <div class="verif-summary-text" id="verif-summary">
+                    Awaiting recovery execution for closed-loop telemetry verification.
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT COLUMN: TELEMETRY, RISK, FAULT MATRIX & AUDIT TIMELINE -->
+        <section class="cc-col cc-col-telemetry">
+            
+            <!-- LIVE TELEMETRY CARD -->
+            <div class="glass-card telemetry-card">
+                <div class="card-header">
+                    <h2>LIVE FLIGHT TELEMETRY</h2>
+                    <span class="link-pulse-badge" id="telem-link-badge">CONNECTED</span>
+                </div>
+
+                <!-- Battery Bar -->
+                <div class="battery-section">
+                    <div class="battery-meta">
+                        <span class="battery-label">BATTERY LEVEL</span>
+                        <span class="battery-percent font-mono" id="telem-battery-pct">100.0%</span>
+                    </div>
+                    <div class="battery-track">
+                        <div class="battery-fill" id="telem-battery-bar" style="width: 100%;"></div>
+                    </div>
+                </div>
+
+                <!-- Metrics Grid -->
+                <div class="metrics-grid font-mono">
+                    <div class="metric-cell">
+                        <span class="m-label">GPS STATUS</span>
+                        <span class="m-val status-green" id="telem-gps-status">CONNECTED</span>
+                    </div>
+                    <div class="metric-cell">
+                        <span class="m-label">GPS ACCURACY</span>
+                        <span class="m-val" id="telem-gps-acc">4.0 m</span>
+                    </div>
+                    <div class="metric-cell">
+                        <span class="m-label">SATELLITES</span>
+                        <span class="m-val" id="telem-sats">10</span>
+                    </div>
+                    <div class="metric-cell">
+                        <span class="m-label">GPS CONFIDENCE</span>
+                        <span class="m-val" id="telem-gps-conf">1.00</span>
+                    </div>
+                    <div class="metric-cell">
+                        <span class="m-label">SPEED</span>
+                        <span class="m-val" id="telem-speed">0.0 u/s</span>
+                    </div>
+                    <div class="metric-cell">
+                        <span class="m-label">ALTITUDE</span>
+                        <span class="m-val" id="telem-altitude">10.0 m</span>
+                    </div>
+                    <div class="metric-cell">
+                        <span class="m-label">DIST TO HOME</span>
+                        <span class="m-val" id="telem-dist-home">0.0 u</span>
+                    </div>
+                    <div class="metric-cell">
+                        <span class="m-label">DIST TO DEST</span>
+                        <span class="m-val" id="telem-dist-dest">100.0 u</span>
+                    </div>
+                    <div class="metric-cell cell-span-2">
+                        <span class="m-label">AIRSPACE ZONE CLASSIFICATION</span>
+                        <span class="m-val zone-allowed" id="telem-zone-type">ALLOWED</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SUBSYSTEM FAULT MATRIX (Part W) -->
+            <div class="glass-card fault-matrix-card">
+                <div class="card-header">
+                    <h2>SUBSYSTEM FAULT MATRIX</h2>
+                </div>
+                <div class="fault-matrix-grid">
+                    <div class="subsys-card ok" id="card-gps">
+                        <span class="subsys-icon">🛰️</span>
+                        <span class="subsys-name">GPS LOCK</span>
+                        <span class="subsys-state" id="subsys-gps-state">HEALTHY</span>
+                    </div>
+                    <div class="subsys-card ok" id="card-battery">
+                        <span class="subsys-icon">🔋</span>
+                        <span class="subsys-name">BATTERY</span>
+                        <span class="subsys-state" id="subsys-battery-state">NOMINAL</span>
+                    </div>
+                    <div class="subsys-card ok" id="card-comm">
+                        <span class="subsys-icon">📡</span>
+                        <span class="subsys-name">GROUND LINK</span>
+                        <span class="subsys-state" id="subsys-comm-state">ONLINE</span>
+                    </div>
+                    <div class="subsys-card ok" id="card-obstacle">
+                        <span class="subsys-icon">🛡️</span>
+                        <span class="subsys-name">CORRIDOR</span>
+                        <span class="subsys-state" id="subsys-obstacle-state">CLEAR</span>
+                    </div>
+                    <div class="subsys-card ok" id="card-geofence">
+                        <span class="subsys-icon">🗺️</span>
+                        <span class="subsys-name">GEOFENCE</span>
+                        <span class="subsys-state" id="subsys-geofence-state">COMPLIANT</span>
+                    </div>
+                    <div class="subsys-card ok" id="card-security">
+                        <span class="subsys-icon">🔒</span>
+                        <span class="subsys-name">SECURITY</span>
+                        <span class="subsys-state" id="subsys-security-state">LOCKED</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RISK SCORE & THREAT ASSESSMENT PANEL (Part L) -->
+            <div class="glass-card risk-panel">
+                <div class="card-header">
+                    <h2>TRANSPARENT RISK ASSESSMENT</h2>
+                    <span class="badge-risk-band" id="risk-band-badge">LOW</span>
+                </div>
+                <div class="risk-score-display">
+                    <div class="score-circle">
+                        <span class="score-number font-mono" id="risk-score-num">0</span>
+                        <span class="score-sub">PTS</span>
+                    </div>
+                    <div class="risk-meta-text">
+                        <div class="risk-level-name" id="risk-level-name">NOMINAL (0–2)</div>
+                        <p class="risk-description" id="risk-summary-text">No active risk factors detected along flight corridor.</p>
+                    </div>
+                </div>
+                <div class="risk-factor-list" id="risk-factors-container">
+                    <!-- Dynamic risk factor items -->
+                </div>
+            </div>
+
+            <!-- AUDIT TRAIL / EVENT TIMELINE (Part U & T) -->
+            <div class="glass-card timeline-card">
+                <div class="card-header">
+                    <h2>MISSION AUDIT TRAIL</h2>
+                    <span class="tag-subtle">Chronological SQLite Events</span>
+                </div>
+                <div class="timeline-scroll" id="events-timeline">
+                    <!-- Events injected via JS -->
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- FOOTER DISCLAIMER (Part Z: Honest Limitations) -->
+    <footer class="cc-footer">
+        <p>
+            ⚠️ <strong>Simulated Software-First Demonstration:</strong> 
+            Geofence boundaries, flight dynamics, and sensor streams are simulated for autonomous decision demonstration. 
+            The Emergency Brain architecture is production-ready for flight controller telemetry interfaces.
+        </p>
+    </footer>
+
+    <script src="/static/script.js"></script>
+</body>
+</html>
